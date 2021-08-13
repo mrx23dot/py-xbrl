@@ -6,7 +6,7 @@ It is used by the different parsing modules.
 import lxml.html
 from lxml import etree as ET
 
-def parse_file(path: str) -> ET:
+def parse_file(path: str) -> (ET,dict):
     """
     Parses a file, returns the Root element with an attribute 'ns_map' containing the prefix - namespaces map
     @return:
@@ -20,4 +20,12 @@ def parse_file(path: str) -> ET:
         # parse as xml, xsd
         tree = ET.parse(path)
 
-    return tree
+    # extract namespace map
+    ns_map = dict()
+    for item in tree.iter():
+        for k,v in item.attrib.items():
+            if ':' in k:
+                nm = k.split(':')[-1]
+                if not nm in ns_map:
+                    ns_map[nm] = v
+    return tree,ns_map

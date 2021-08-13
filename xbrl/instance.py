@@ -380,8 +380,7 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
     to the .getRoot() is missing. This has the benefit, that we can search the document with absolute xpath expressions
     => in the XBRL-parse function root is ET.Element, here just an instance of ElementTree class!
     """
-    root: ET = parse_file(instance_path)
-    ns_map: dict = root.getroot().attrib['ns_map']
+    root, ns_map = parse_file(instance_path)
     # get the link to the taxonomy schema and parse it
     schema_ref: ET.Element = root.find('.//{}schemaRef'.format(LINK_NS))
     schema_uri: str = schema_ref.attrib[XLINK_NS + 'href']
