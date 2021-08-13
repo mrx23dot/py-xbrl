@@ -7,7 +7,7 @@ as well as the taxonomies and linkbases used by the instance files
 import abc
 import logging
 from typing import List
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 from datetime import date, datetime
 from time import strptime
 
