@@ -4,6 +4,9 @@ Module containing functions for creating and resolving uri's
 import os
 import re
 
+# precompiled for speed https://stackoverflow.com/questions/1276764/stripping-everything-but-alphanumeric-chars-from-a-string-in-python
+pattern = re.compile('[\W]+')
+uri_cache = dict() # slowly growing in RAM, prevents regexp recalculations
 
 def resolve_uri(dir_uri: str, relative_uri: str) -> str:
     """
@@ -66,10 +69,22 @@ def compare_uri(uri1: str, uri2: str) -> bool:
     :param uri2:
     :return:
     """
-    # first remove any protocol
-    if '://' in uri1: uri1 = uri1.split('://')[1]
-    if '://' in uri2: uri2 = uri2.split('://')[1]
+    # high frequency function!
 
-    uri1_segments: [str] = re.findall(r"[\w']+", uri1)
-    uri2_segments: [str] = re.findall(r"[\w']+", uri2)
-    return uri1_segments == uri2_segments
+    # uri1
+    if uri1 in uri_cache:
+        uri1new = uri_cache[uri1]
+    else:
+        # first remove any protocol
+        uri1new = pattern.sub('', uri1.split('://')[-1])   
+        uri_cache[uri1] = uri1new
+
+    # uri2
+    if uri2 in uri_cache:
+        uri2new = uri_cache[uri2]
+    else:
+        uri2new = pattern.sub('', uri2.split('://')[-1])
+        uri_cache[uri2] = uri2new
+
+    # most of the cases false
+    return uri1new == uri2new
