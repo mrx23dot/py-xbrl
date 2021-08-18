@@ -257,7 +257,7 @@ def parse_taxonomy(schema_path: str, cache: HttpCache, schema_url: str or None =
     role_type_elements: List[ET.Element] = root.findall('xsd:annotation/xsd:appinfo/link:roleType', NAME_SPACES)
     # parse ELR's
     for elr in role_type_elements:
-        elr_definition = elr.find(LINK_NS + 'definition')
+        elr_definition = elr.find('definition')
         if elr_definition is None or elr_definition.text is None: continue
         taxonomy.link_roles.append(
             ExtendedLinkRole(elr.attrib['id'], elr.attrib['roleURI'], elr_definition.text.strip()))

@@ -287,10 +287,10 @@ def parse_xbrl(instance_path: str, cache: HttpCache, instance_url: str or None =
     with a relative path (since it is in the same directory as the instance file) schemaRef="./aapl-20211231.xsd"
     :return:
     """
-    root: ET.Element = parse_file(instance_path).getroot()
+    root, ns_map = parse_file(instance_path)
     # get the link to the taxonomy schema and parse it
-    schema_ref: ET.Element = root.find(LINK_NS + 'schemaRef')
-    schema_uri: str = schema_ref.attrib[XLINK_NS + 'href']
+    schema_ref: ET.Element = root.find('//schemaRef'.lower())
+    schema_uri: str = schema_ref.attrib['xlink:href']
     # check if the schema uri is relative or absolute
     # submissions from SEC normally have their own schema files, whereas submissions from the uk have absolute schemas
     if schema_uri.startswith('http'):
@@ -382,8 +382,8 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
     """
     root, ns_map = parse_file(instance_path)
     # get the link to the taxonomy schema and parse it
-    schema_ref: ET.Element = root.find('.//{}schemaRef'.format(LINK_NS))
-    schema_uri: str = schema_ref.attrib[XLINK_NS + 'href']
+    schema_ref: ET.Element = root.find('//schemaRef'.lower())
+    schema_uri: str = schema_ref.attrib['xlink:href']
     # check if the schema uri is relative or absolute
     # submissions from SEC normally have their own schema files, whereas submissions from the uk have absolute schemas
     if schema_uri.startswith('http'):
@@ -399,7 +399,7 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
         taxonomy: TaxonomySchema = parse_taxonomy(schema_path, cache)
 
     # get all contexts and units
-    xbrl_resources: ET.Element = root.find('.//ix:resources', ns_map)
+    xbrl_resources: ET.Element = root.find('.//resources')
     if xbrl_resources is None: raise InstanceParseException('Could not find xbrl resources in file')
     # parse contexts and units
     context_dir = _parse_context_elements(xbrl_resources.findall('xbrli:context', NAME_SPACES), ns_map, taxonomy, cache)

@@ -28,4 +28,5 @@ def parse_file(path: str) -> (ET,dict):
                 nm = k.split(':')[-1]
                 if not nm in ns_map:
                     ns_map[nm] = v
-    return tree,ns_map
+    return ET.ElementTree(tree.getroot()), ns_map
+ 
