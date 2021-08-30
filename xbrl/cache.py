@@ -118,7 +118,7 @@ class HttpCache:
         """
         return self.cache_dir + re.sub("https?://", "", url)
 
-    def cache_edgar_enclosure(self, enclosure_url: str) -> str:
+    def cache_edgar_enclosure(self, enclosure_url: str, remove=True) -> str:
         """
         The SEC provides zip folders that contain all xbrl related files for a given submission.
         These files are i.e: Instance Document, Extension Taxonomy, Linkbases.
@@ -135,9 +135,13 @@ class HttpCache:
             raise Exception("This is not a valid zip folder")
         # download the zip folder and store it into the default http cache
         enclosure_path = self.cache_file(file_url=enclosure_url)
+        # drop zip's filename
         submission_dir_path = self.url_to_path('/'.join(enclosure_url.split('/')[:-1]))
         # extract the zip folder
         with zipfile.ZipFile(enclosure_path, "r") as zip_ref:
             zip_ref.extractall(submission_dir_path)
-            zip_ref.close()
+
+        if remove is True:
+            os.remove(enclosure_path)
+
         return submission_dir_path
