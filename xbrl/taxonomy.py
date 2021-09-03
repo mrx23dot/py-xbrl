@@ -37,6 +37,10 @@ ns_schema_map: dict = {
     "http://fasb.org/srt/2018-01-31": "http://xbrl.fasb.org/srt/2018/elts/srt-2018-01-31.xsd",
     "http://fasb.org/srt/2019-01-31": "http://xbrl.fasb.org/srt/2019/elts/srt-2019-01-31.xsd",
     "http://fasb.org/srt/2020-01-31": "http://xbrl.fasb.org/srt/2020/elts/srt-2020-01-31.xsd",
+    "http://fasb.org/srt/2021-01-31": "http://xbrl.fasb.org/srt/2021/elts/srt-2021-01-31.xsd",
+    "http://fasb.org/srt/2022-01-31": "http://xbrl.fasb.org/srt/2022/elts/srt-2022-01-31.xsd",
+    "http://fasb.org/srt/2023-01-31": "http://xbrl.fasb.org/srt/2023/elts/srt-2023-01-31.xsd",
+    "http://fasb.org/srt/2024-01-31": "http://xbrl.fasb.org/srt/2024/elts/srt-2024-01-31.xsd",
 
     "http://xbrl.sec.gov/stpr/2018-01-31": "https://xbrl.sec.gov/stpr/2018/stpr-2018-01-31.xsd",
     # Replace draft taxonomy with official STPR 2021 one once it is released
@@ -173,17 +177,17 @@ class TaxonomySchema:
         """
         Builds a namespace->taxonomy look up table by recursion.
         If the taxonomy cannot be found, it will insert None
-        
+
         :param lut: an empty dict to fill up
         :return a dict look up table containsing TaxonomySchema objs or None
         """
 
         # one taxonomy goes by two names, keep first instance
         if not self.namespace in lut:
-            lut[self.namespace] = self 
+            lut[self.namespace] = self
 
         if not self.schema_url in lut:
-            lut[self.schema_url] = self 
+            lut[self.schema_url] = self
         # name normalised on consumption only, for speed
 
         # recurse children
