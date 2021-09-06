@@ -319,6 +319,9 @@ def parse_xbrl(instance_path: str, cache: HttpCache, instance_url: str or None =
     # parse facts
     facts: List[AbstractFact] = []
     for fact_elem in root:
+        # pre-checks
+        if isinstance(fact_elem.tag, str) is False:
+            continue
         # skip contexts and units
         if 'context' in fact_elem.tag or 'unit' in fact_elem.tag or 'schemaRef' in fact_elem.tag:
             continue
