@@ -6,6 +6,7 @@ import re
 
 # precompiled for speed https://stackoverflow.com/questions/1276764/stripping-everything-but-alphanumeric-chars-from-a-string-in-python
 pattern = re.compile('[\W]+')
+uri_cache = dict() # global lookup for all instances, slowly growing in RAM, prevents millions of regexp recalculations
 
 def resolve_uri(dir_uri: str, relative_uri: str) -> str:
     """
@@ -56,14 +57,6 @@ def resolve_uri(dir_uri: str, relative_uri: str) -> str:
 
     return '/'.join(url_parts)
 
-def normalise_uri(uri: str) -> str:
-    """ drop protocol from uri, and any non a-z chars for easy comparison """
-    return pattern.sub('', uri.split('://')[-1])
-
-def normalise_uri_dict(dict_in: dict) -> dict:
-    for k,v in dict_in.copy().items():
-        dict_in[normalise_uri(k)] = dict_in.pop(k)
-    return dict_in
 
 def compare_uri(uri1: str, uri2: str) -> bool:
     """
@@ -76,4 +69,22 @@ def compare_uri(uri1: str, uri2: str) -> bool:
     :param uri2:
     :return:
     """
-    return normalise_uri(uri1) == normalise_uri(uri2)
+    # high frequency function!
+
+    # uri1
+    if uri1 in uri_cache:
+        uri1new = uri_cache[uri1]
+    else:
+        # first remove any protocol
+        uri1new = pattern.sub('', uri1.split('://')[-1])   
+        uri_cache[uri1] = uri1new
+
+    # uri2
+    if uri2 in uri_cache:
+        uri2new = uri_cache[uri2]
+    else:
+        uri2new = pattern.sub('', uri2.split('://')[-1])
+        uri_cache[uri2] = uri2new
+
+    # most of the cases false
+    return uri1new == uri2new
