@@ -12,10 +12,10 @@ def parse_file(path: str) -> ET:
     @return:
     """
 
-    # parse even html as xml to retain namespace, otherwise ignores it 
+    # parse even html as xml to retain namespace, otherwise ignores it
     # https://stackoverflow.com/questions/6597271/how-to-preserve-namespace-information-when-parsing-html-with-lxml
     # parse as xml, xsd
-    tree = ET.parse(path)
+    parser = ET.XMLParser(remove_comments=True, huge_tree=True)
+    tree = ET.parse(path, parser)
 
     return ET.ElementTree(tree.getroot())
- 

@@ -237,7 +237,8 @@ def parse_taxonomy(schema_path: str, cache: HttpCache, schema_url: str or None =
         raise TaxonomyNotFound(f"Could not find taxonomy schema at {schema_path}")
 
     # Get the local absolute path to the schema file (and download it if it is not yet cached)
-    root: ET.Element = ET.parse(schema_path).getroot()
+    parser = ET.XMLParser(remove_comments=True, huge_tree=True)
+    root: ET.Element = ET.parse(schema_path, parser).getroot()
     # get the target namespace of the taxonomy
     target_ns = root.attrib['targetNamespace']
     taxonomy: TaxonomySchema = TaxonomySchema(schema_url if schema_url else schema_path, target_ns)

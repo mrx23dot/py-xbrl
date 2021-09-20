@@ -444,8 +444,8 @@ def parse_linkbase(linkbase_path: str, linkbase_type: LinkbaseType, linkbase_url
         'This function only parses locally saved linkbases. Please use parse_linkbase_url to parse remote linkbases')
     if not os.path.exists(linkbase_path):
         raise LinkbaseNotFoundException(f"Could not find linkbase at {linkbase_path}")
-
-    root: ET.Element = ET.parse(linkbase_path).getroot()
+    parser = ET.XMLParser(remove_comments=True, huge_tree=True)
+    root: ET.Element = ET.parse(linkbase_path, parser).getroot()
     # store the role refs in a dictionary, with the role uri as key.
     # Role Refs are xlink's that connect the extended Links to the ELR defined in the schema
     role_refs: dict = {}
