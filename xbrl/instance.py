@@ -430,7 +430,7 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
         # ixbrl values are not normalized! They are formatted (i.e. 123,000,000)
 
         if fact_elem.tag == '{' + ns_map['ix'] + '}nonFraction':
-            fact_value: float or None = _extract_non_fraction_value(fact_elem)
+            fact_value: float or None = _extract_non_fraction_value(fact_elem, ns_map)
 
             unit: AbstractUnit = unit_dir[fact_elem.attrib['unitRef'].strip()]
             decimals_text: str = str(fact_elem.attrib['decimals']).strip() if 'decimals' in fact_elem.attrib else '0'
@@ -472,14 +472,14 @@ def _extract_non_numeric_value(fact_elem: ET.Element) -> str:
     return fact_value
 
 
-def _extract_non_fraction_value(fact_elem: ET.Element) -> float or None:
+def _extract_non_fraction_value(fact_elem: ET.Element, ns_map: dict) -> float or None:
     """
     https://www.xbrl.org/Specification/inlineXBRL-part1/PWD-2013-02-13/inlineXBRL-part1-PWD-2013-02-13.html#d1e5045
     :param fact_elem:
     :return:
     """
-    if 'xsi' in fact_elem.attrib['ns_map']:
-        xsi_nil_attrib: str = '{' + fact_elem.attrib['ns_map']['xsi'] + '}nil'
+    if 'xsi' in ns_map:
+        xsi_nil_attrib: str = '{' + ns_map['xsi'] + '}nil'
         if xsi_nil_attrib in fact_elem.attrib and fact_elem.attrib[xsi_nil_attrib] == 'true':
             return None
 
@@ -556,7 +556,7 @@ def _parse_context_elements(context_elements: List[ET.Element], ns_map: dict, ta
                 _update_ns_map(ns_map, explicit_member_elem.nsmap)
                 dimension_prefix, dimension_concept_name = explicit_member_elem.attrib['dimension'].strip().split(':')
                 member_prefix, member_concept_name = explicit_member_elem.text.strip().split(':')
-                
+
                 # get the taxonomy where the dimension attribute is defined
                 dimension_tax = taxonomy.get_taxonomy(ns_map[dimension_prefix])
                 # check if the taxonomy was found or try to subsequently load the taxonomy

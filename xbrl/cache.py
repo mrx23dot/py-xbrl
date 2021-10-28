@@ -146,6 +146,7 @@ class HttpCache:
             os.remove(enclosure_path)
 
         return submission_dir_path
+
     def find_entry_file(self, dir_path: str) -> str or None:
         """
         NOTE: This function only works for enclosed SEC submissions that where already downloaded!

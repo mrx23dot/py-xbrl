@@ -50,11 +50,7 @@ class ConnectionManager:
 
         if self.logs: logger.info('downloading: '+url)
         response = self._session.get(url, headers=headers, allow_redirects=True, verify=self.verify_https)
-<<<<<<< HEAD
         if self.logs: logger.info('end H'+str(response.status_code))
-=======
-        if self.logs: logger.info(str(response.status_code) + " " + url)
->>>>>>> main
 
         # no actual delay after last download
         self.next_try_systime_ms = self._get_systime_ms() + self._delay_ms
