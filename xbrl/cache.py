@@ -52,10 +52,11 @@ class HttpCache:
                               logs: bool = True) -> None:
         """
         Sets the connection params for all following request
-        :param delay: int specifying milliseconds to wait between each successfull request
+        :param delay: int specifying milliseconds to wait between each successful request
         :param retries: int specifying how many times a request will be tried before assuming its failure.
         :param backoff_factor: Used to measure time to sleep between failed requests. The formula used is:
             {backoff factor} * (2 ** ({number of total retries} - 1))
+        :param logs: enables or disables download logs
         :return:
         """
         self.connection_manager._delay_ms = delay
@@ -145,3 +146,44 @@ class HttpCache:
             os.remove(enclosure_path)
 
         return submission_dir_path
+    def find_entry_file(self, dir_path: str) -> str or None:
+        """
+        NOTE: This function only works for enclosed SEC submissions that where already downloaded!
+        Also this function does only return the most likely file path for the instance document.
+        If you want to be certain i would recommend to use the SEC Structured Disclosure RSS Feeds
+        https://www.sec.gov/structureddata/rss-feeds-submitted-filings
+        These rss feeds list all files per submission and gives you information about the filetype (instance document,
+        taxonomy schema, label linkbase, exhibit e.t.c)
+
+        Find the most likely entry file in provided filling directory
+        """
+
+        # filter for files in interest
+        valid_files = []
+        for ext in '.htm .xml .xsd'.split():  # valid extensions in priority
+            for f in os.listdir(dir_path):
+                f_full = os.path.join(dir_path, f)
+                if os.path.isfile(f_full) and f.lower().endswith(ext):
+                    valid_files.append(f_full)
+
+        # find first file which is not included by others
+        entry_candidates = []
+        for file1 in valid_files:
+            f_dir, file_nm = os.path.split(file1)
+            # foreach file check all other for inclusion
+            found_in_other = False
+            for file2 in valid_files:
+                if file1 != file2:
+                    if file_nm in Path(file2).read_text():
+                        found_in_other = True
+                        break
+
+            if not found_in_other:
+                entry_candidates.append((file1, os.path.getsize(file1)))
+
+        # if multiple choose biggest
+        entry_candidates.sort(key=lambda tup: tup[1], reverse=True)
+        if len(entry_candidates) > 0:
+            file_path, size = entry_candidates[0]
+            return file_path
+        return None
