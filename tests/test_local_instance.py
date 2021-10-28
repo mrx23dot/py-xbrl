@@ -11,7 +11,7 @@ import logging
 
 # abs_file_path: str = str(os.path.dirname(os.path.abspath(inspect.getframeinfo(inspect.currentframe()).filename)))
 
-class TaxonomySchemaTest(unittest.TestCase):
+class InstanceTest(unittest.TestCase):
     """
     Unit test for taxonomy.test_parse_taxonomy()
     """

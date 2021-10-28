@@ -9,10 +9,10 @@ import logging
 from typing import List
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
-from time import strptime
 
 from xbrl import TaxonomyNotFound, InstanceParseException
 from xbrl.cache import HttpCache
+from xbrl.helper import transformation
 from xbrl.taxonomy import Concept, TaxonomySchema, parse_taxonomy, parse_common_taxonomy, parse_taxonomy_url
 from xbrl.helper.uri_helper import resolve_uri
 from xbrl.helper.xml_parser import parse_file
@@ -193,7 +193,7 @@ class NumericFact(AbstractFact):
         unitRef="usd">377284000</us-gaap:Assets>
     """
 
-    def __init__(self, concept: Concept, context: AbstractContext, value: float, unit: AbstractUnit,
+    def __init__(self, concept: Concept, context: AbstractContext, value: float or None, unit: AbstractUnit,
                  decimals: int or None) -> None:
         """
         :param concept: see Abstract Fact
@@ -331,12 +331,12 @@ def parse_xbrl(instance_path: str, cache: HttpCache, instance_url: str or None =
         if tax is None: tax = _load_common_taxonomy(cache, taxonomy_ns, taxonomy)
 
         concept: Concept = tax.concepts[tax.name_id_map[concept_name]]
-        context: AbstractContext = context_dir[fact_elem.attrib['contextRef']]
+        context: AbstractContext = context_dir[fact_elem.attrib['contextRef'].strip()]
 
         if 'unitRef' in fact_elem.attrib:
             # the fact is a numerical fact
             # get the unit
-            unit: AbstractUnit = unit_dir[fact_elem.attrib['unitRef']]
+            unit: AbstractUnit = unit_dir[fact_elem.attrib['unitRef'].strip()]
             decimals_text: str = str(fact_elem.attrib['decimals']).strip()
             decimals: int = None if decimals_text.lower() == 'inf' else int(decimals_text)
             fact = NumericFact(concept, context, float(fact_elem.text), unit, decimals)
@@ -412,112 +412,101 @@ def parse_ixbrl(instance_path: str, cache: HttpCache, instance_url: str or None 
     for fact_elem in fact_elements:
         # update the prefix map (sometimes the xmlns is defined at XML-Element level and not at the root element)
         _update_ns_map(ns_map, fact_elem.attrib['ns_map'])
-        # check fi the fact actually has data in it
-        if fact_elem.text is None or len(fact_elem.text.strip()) == 0:
-            continue
         taxonomy_prefix, concept_name = fact_elem.attrib['name'].split(':')
 
         tax = taxonomy.get_taxonomy(ns_map[taxonomy_prefix])
         if tax is None: tax = _load_common_taxonomy(cache, ns_map[taxonomy_prefix], taxonomy)
 
         concept: Concept = tax.concepts[tax.name_id_map[concept_name]]
-        context: AbstractContext = context_dir[fact_elem.attrib['contextRef']]
+        context: AbstractContext = context_dir[fact_elem.attrib['contextRef'].strip()]
         # ixbrl values are not normalized! They are formatted (i.e. 123,000,000)
-        fact_value: str or float = _extract_ixbrl_value(fact_elem)
 
-        if isinstance(fact_value, float) and 'unitRef' in fact_elem.attrib:
-            # the fact is a numerical fact
-            # get the unit
-            unit: AbstractUnit = unit_dir[fact_elem.attrib['unitRef']]
-            decimals_text: str = str(fact_elem.attrib['decimals']).strip()
+        if fact_elem.tag == '{' + ns_map['ix'] + '}nonFraction':
+            fact_value: float or None = _extract_non_fraction_value(fact_elem)
+
+            unit: AbstractUnit = unit_dir[fact_elem.attrib['unitRef'].strip()]
+            decimals_text: str = str(fact_elem.attrib['decimals']).strip() if 'decimals' in fact_elem.attrib else '0'
             decimals: int = None if decimals_text.lower() == 'inf' else int(decimals_text)
 
-            fact = NumericFact(concept, context, fact_value, unit, decimals)
-        else:
-            # the fact is probably a text fact
-            fact = TextFact(concept, context, str(fact_value))
-        facts.append(fact)
+            facts.append(NumericFact(concept, context, fact_value, unit, decimals))
+        elif fact_elem.tag == '{' + ns_map['ix'] + '}nonNumeric':
+            fact_value: str = _extract_non_numeric_value(fact_elem)
+            facts.append(TextFact(concept, context, str(fact_value)))
+
     return XbrlInstance(instance_url if instance_url else instance_path, taxonomy, facts, context_dir, unit_dir)
 
 
-def _extract_ixbrl_value(fact_elem: ET.Element) -> float or str:
+def _extract_non_numeric_value(fact_elem: ET.Element) -> str:
     """
-    The values in inline xbrl files are not normalized!
-    This function normalizes the value
+    This function parses a ix:nonNumeric fact as defined in:
+    https://www.xbrl.org/Specification/inlineXBRL-part1/PWD-2013-02-13/inlineXBRL-part1-PWD-2013-02-13.html#d1e6391
+
+
     :param fact_elem:
     :return:
     """
+    fact_value = '' if fact_elem.text is None else fact_elem.text
 
+    # recursively iterate over all children (<ix:nonNumeric><b>data</b></ix:nonNumeric>)
+    for children in fact_elem:
+        fact_value += _extract_text_value(children)
+
+    fact_format = fact_elem.attrib['format'] if 'format' in fact_elem.attrib else None
+    if fact_format:
+        try:
+            if fact_format.startswith('ixt:'):
+                fact_value = transformation.transform_ixt(fact_value, fact_format.split(':')[1])
+            elif fact_format.startswith('ixt-sec'):
+                fact_value = transformation.transform_ixt_sec(fact_value, fact_format.split(':')[1])
+        except Exception:
+            logging.warning(f'Could not transform value "{fact_value}" with format f{fact_format}')
+
+    return fact_value
+
+
+def _extract_non_fraction_value(fact_elem: ET.Element) -> float or None:
     """
-    The value of the fact can have the following formats:
-
-    numcommadecimal: number with comma as decimal separator and dot/space as optional thousands separator
-    numdotdecimal: number with dot as decimal separator and comma/space as optional thousands separator
-    numdotdecimalin: some weird indian number format
-
-    datedaymonthyear: i.e: 31.12.2016 or 31/12/2016
-    datemonthdayyear: i.e: 12.31.2016
-    datemonthdayyearen: i.e: December 31, 2016
-    datedaymonthyearen: i.e: 31-Dec-16
-    dateyearmonthday: i.e: 2016-12-31
-
-    numdash: some filings are using dashes for zero values
-
-    booleantrue: boolean value
-
-    and more:
-    https://www.xbrl.org/Specification/inlineXBRL-transformationRegistry/REC-2015-02-26/inlineXBRL-transformationRegistry-REC-2015-02-26.html#d1e167
+    https://www.xbrl.org/Specification/inlineXBRL-part1/PWD-2013-02-13/inlineXBRL-part1-PWD-2013-02-13.html#d1e5045
+    :param fact_elem:
+    :return:
     """
-    # todo learn more about text fact continuation and exclusion
-    # https://www.xbrl.org/guidance/ixbrl-tagging-features/#12-multiple-documents
+    if 'xsi' in fact_elem.attrib['ns_map']:
+        xsi_nil_attrib: str = '{' + fact_elem.attrib['ns_map']['xsi'] + '}nil'
+        if xsi_nil_attrib in fact_elem.attrib and fact_elem.attrib[xsi_nil_attrib] == 'true':
+            return None
 
-    # Stores the unscaled number
-    raw_value: str or float
+    fact_value = '' if fact_elem.text is None else fact_elem.text
+    # recursively iterate over all children (<ix:nonNumeric><b>data</b></ix:nonNumeric>)
+    for children in fact_elem:
+        fact_value += _extract_text_value(children)
 
-    # The scale factor is expressed as a power of ten and denotes the amount by which the presented figure must be multiplied
+    fact_format = fact_elem.attrib['format'] if 'format' in fact_elem.attrib else None
     value_scale: int = int(fact_elem.attrib['scale']) if 'scale' in fact_elem.attrib else 0
     value_sign: str or None = fact_elem.attrib['sign'] if 'sign' in fact_elem.attrib else None
 
-    if 'format' not in fact_elem.attrib:
-        # check if the value has a unit. We do not want to convert text facts like the cik 0000023432 to a float!
-        if 'unitRef' not in fact_elem.attrib:
-            return str(fact_elem.text).strip()
+    if fact_format:
         try:
-            raw_value = float(fact_elem.text)
-        except ValueError:
-            raw_value = str(fact_elem.text).strip()
-    else:
-        value_format: str = fact_elem.attrib['format'].split(':')[1]
-        # go through the different formats
-        if value_format == 'numcommadecimal':
-            raw_value = float(fact_elem.text.strip().replace(' ', '').replace('.', '').replace(',', '.'))
-        elif value_format == 'numdotdecimal':
-            raw_value = float(fact_elem.text.strip().replace(' ', '').replace(',', ''))
-        elif value_format == 'datemonthdayen':
-            # Value is in the format Month(en) Day i.e: December 31 or Dec 31 or December-31 or Dec-31
-            fact_elem.text = fact_elem.text.replace('-', ' ')
-            # convert it into the default format also used by standard xbrl (--MM-DD)
-            if len(fact_elem.text.split(' ')[0]) == 3:
-                # The month is in the abbreviated form (i.e: Dec)
-                parsed_date = strptime(fact_elem.text, '%b %d')
-            else:
-                parsed_date = strptime(fact_elem.text, '%B %d')
-            raw_value = '--{}-{}'.format(parsed_date.tm_mon, parsed_date.tm_mday)
-        elif value_format == 'numwordsen' and fact_elem.text.strip().lower() in ('no', 'none'):
-            # https://www.sec.gov/info/edgar/edgarfm-vol2-v50.pdf 5.2.5.12
-            # if the fact is numerical and has the value 'no', interpret the fact as zero (0)
-            raw_value = 0
-        else:
-            raw_value = str(fact_elem.text.strip())
+            if fact_format.startswith('ixt:'):
+                fact_value = transformation.transform_ixt(fact_value, fact_format.split(':')[1])
+            elif fact_format.startswith('ixt-sec'):
+                fact_value = transformation.transform_ixt_sec(fact_value, fact_format.split(':')[1])
+        except Exception:
+            logging.warning(f'Could not transform value "{fact_value}" with format f{fact_format}')
 
-    if isinstance(raw_value, float):
-        raw_value = raw_value * pow(10, value_scale)
-        # Floating-point error mitigation
-        if abs(raw_value) > 1e6: raw_value = float(round(raw_value))
-        if value_sign == '-':
-            raw_value = -raw_value
+    scaled_value = float(fact_value) * pow(10, value_scale)
+    # Floating-point error mitigation
+    if abs(scaled_value) > 1e6: scaled_value = float(round(scaled_value))
+    if value_sign == '-':
+        scaled_value = -scaled_value
 
-    return raw_value
+    return scaled_value
+
+
+def _extract_text_value(element: ET.Element) -> str:
+    text = '' if element.text is None else element.text
+    for children in element:
+        text += _extract_text_value(children)
+    return text
 
 
 def _parse_context_elements(context_elements: List[ET.Element], ns_map: dict, taxonomy: TaxonomySchema,
@@ -543,14 +532,14 @@ def _parse_context_elements(context_elements: List[ET.Element], ns_map: dict, ta
         if instant_date is not None:
             # the context is a instant context
             context = InstantContext(context_id, entity,
-                                     datetime.strptime(instant_date.text.strip(), '%Y-%m-%d').date())
+                                     datetime.strptime(instant_date.text.strip()[:10], '%Y-%m-%d').date())
         elif forever is not None:
             context = ForeverContext(context_id, entity)
         else:
             # the context is a time frame context
             context = TimeFrameContext(context_id, entity,
-                                       datetime.strptime(start_date.text.strip(), '%Y-%m-%d').date(),
-                                       datetime.strptime(end_date.text.strip(), '%Y-%m-%d').date())
+                                       datetime.strptime(start_date.text.strip()[:10], '%Y-%m-%d').date(),
+                                       datetime.strptime(end_date.text.strip()[:10], '%Y-%m-%d').date())
 
         # check if dimensional information exists on this context and parse it
         segment: ET.Element = context_elem.find('xbrli:entity/xbrli:segment', NAME_SPACES)
