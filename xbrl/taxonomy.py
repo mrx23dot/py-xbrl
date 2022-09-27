@@ -13,6 +13,10 @@ from lxml import etree as ET
 from functools import lru_cache
 from urllib.parse import unquote
 
+from bs4 import BeautifulSoup
+import requests
+requests.packages.urllib3.disable_warnings()
+
 from xbrl import XbrlParseException, TaxonomyNotFound
 from xbrl.cache import HttpCache
 from xbrl.helper.uri_helper import resolve_uri, compare_uri
@@ -24,6 +28,32 @@ LINK_NS: str = "{http://www.xbrl.org/2003/linkbase}"
 XLINK_NS: str = "{http://www.w3.org/1999/xlink}"
 XDS_NS: str = "{http://www.w3.org/2001/XMLSchema}"
 XBRLI_NS: str = "{http://www.xbrl.org/2003/instance}"
+
+def download(url, retries=5):
+  for retry in range(retries):
+    print(' getting', url)
+    try:
+      resp = requests.get(url, timeout=4+retry*2, verify=False)
+      if resp.status_code == 404:
+        break
+      resp.raise_for_status()
+      if len(resp.text)<1:
+        break
+      return resp.text
+    except Exception as ex:
+      print(' get', ex)
+
+def parse_edgar_taxonomies():
+  resp = download('https://www.sec.gov/info/edgar/edgartaxonomies.xml')
+  if resp:
+    root = BeautifulSoup(resp, 'xml')
+    if root:
+      entries = root.find_all('Loc', recursive=True)
+      for e in entries:
+        try:
+          yield (e.find('Namespace').text, e.find('Href').text)
+        except Exception as e:
+          print(' error', e)
 
 # dictionary containing all common prefixes and the corresponding namespaces.
 NAME_SPACES: dict = {
@@ -171,6 +201,7 @@ ns_schema_map: dict = {
     "http://fasb.org/srt/2019-01-31": "http://xbrl.fasb.org/srt/2019/elts/srt-2019-01-31.xsd",
     "http://fasb.org/srt/2020-01-31": "http://xbrl.fasb.org/srt/2020/elts/srt-2020-01-31.xsd",
     "http://fasb.org/srt/2021-01-31": "http://xbrl.fasb.org/srt/2021/elts/srt-2021-01-31.xsd",
+    "http://fasb.org/srt/2022": "https://xbrl.fasb.org/srt/2022/elts/srt-2022.xsd",
     "http://fasb.org/srt/2022-01-31": "http://xbrl.fasb.org/srt/2022/elts/srt-2022-01-31.xsd",
     "http://fasb.org/srt/2023-01-31": "http://xbrl.fasb.org/srt/2023/elts/srt-2023-01-31.xsd",
     "http://fasb.org/srt/2024-01-31": "http://xbrl.fasb.org/srt/2024/elts/srt-2024-01-31.xsd",
@@ -193,6 +224,7 @@ ns_schema_map: dict = {
     "http://fasb.org/us-gaap/2019-01-31": "http://xbrl.fasb.org/us-gaap/2019/elts/us-gaap-2019-01-31.xsd",
     "http://fasb.org/us-gaap/2020-01-31": "http://xbrl.fasb.org/us-gaap/2020/elts/us-gaap-2020-01-31.xsd",
     "http://fasb.org/us-gaap/2021-01-31": "http://xbrl.fasb.org/us-gaap/2021/elts/us-gaap-2021-01-31.xsd",
+    "http://fasb.org/us-gaap/2022": "https://xbrl.fasb.org/us-gaap/2022/elts/us-gaap-2022.xsd",
     "http://fasb.org/us-roles/2011-01-31": "http://xbrl.fasb.org/us-gaap/2011/elts/us-roles-2011-01-31.xsd",
     "http://fasb.org/us-roles/2012-01-31": "http://xbrl.fasb.org/us-gaap/2012/elts/us-roles-2012-01-31.xsd",
     "http://fasb.org/us-roles/2013-01-31": "http://xbrl.fasb.org/us-gaap/2013/elts/us-roles-2013-01-31.xsd",
@@ -369,7 +401,10 @@ ns_schema_map: dict = {
     "http://xbrl.us/us-types/2008-03-31": "http://xbrl.us/us-gaap/1.0/elts/us-types-2008-03-31.xsd",
     "http://xbrl.us/us-types/2009-01-31": "http://taxonomies.xbrl.us/us-gaap/2009/elts/us-types-2009-01-31.xsd",
 }
-
+# add new ones from online
+for k,v in parse_edgar_taxonomies():
+  if not k in ns_schema_map:
+    ns_schema_map[k] = v
 
 class Concept:
     """
